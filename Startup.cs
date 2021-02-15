@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
+using Polly;
 
 namespace microservices
 {
@@ -34,7 +35,12 @@ namespace microservices
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "microservices", Version = "v1" });
             });
 
-            services.AddHttpClient<WeatherClient>();
+            services.AddHttpClient<WeatherClient>()
+                .AddTransientHttpErrorPolicy(builder => builder.WaitAndRetryAsync(10, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt))))
+                .AddTransientHttpErrorPolicy(builder => builder.CircuitBreakerAsync(3, TimeSpan.FromSeconds(10)));
+
+            services.AddHealthChecks()
+                .AddCheck<ExternalEndpointHealthCkeck>("OpenWeather");
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -56,6 +62,7 @@ namespace microservices
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapControllers();
+                endpoints.MapHealthChecks("/health");
             });
         }
     }
